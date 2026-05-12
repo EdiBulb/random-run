@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import * as Location from 'expo-location';
 import { Coordinate } from '../types';
+import { DEMO_MODE, DEMO_LOCATION } from '../constants';
 
 interface UseLocationResult {
   location: Coordinate | null;
@@ -14,6 +15,12 @@ export function useLocation(): UseLocationResult {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (DEMO_MODE) {
+      setLocation(DEMO_LOCATION);
+      setLoading(false);
+      return;
+    }
+
     // cancelled flag prevents setState calls after the component unmounts
     let cancelled = false;
 

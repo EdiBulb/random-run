@@ -48,6 +48,21 @@ function generateWaypoints(origin: Coordinate, targetKm: number): Coordinate[] {
   return [wp1, wp2];
 }
 
+// Calculates the bounding box (NE + SW corners) that contains all route coordinates.
+// Used by MapDisplay to fit the camera to the full route after generation.
+export function getBoundingBox(coordinates: Coordinate[]): {
+  ne: [number, number];
+  sw: [number, number];
+} {
+  const lats = coordinates.map((c) => c.latitude);
+  const lngs = coordinates.map((c) => c.longitude);
+
+  return {
+    ne: [Math.max(...lngs), Math.max(...lats)],
+    sw: [Math.min(...lngs), Math.min(...lats)],
+  };
+}
+
 export async function fetchRandomRoute(origin: Coordinate, targetKm: number): Promise<RunRoute> {
   const waypoints = generateWaypoints(origin, targetKm);
 

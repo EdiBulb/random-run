@@ -6,14 +6,20 @@ import { useRoute } from './src/hooks/useRoute';
 import { MapDisplay } from './src/components/MapDisplay';
 import { DistancePicker } from './src/components/DistancePicker';
 import { RouteInfo } from './src/components/RouteInfo';
+import { SplashScreen } from './src/components/SplashScreen';
 import { TargetDistance } from './src/types';
 
 export default function App() {
   const { location, loading: locationLoading, error: locationError } = useLocation();
   const [selectedDistance, setSelectedDistance] = useState<TargetDistance>(5);
   const { route, status, generate } = useRoute(location, selectedDistance);
+  const [showSplash, setShowSplash] = useState(true);
 
   const isGenerating = status === 'loading';
+
+  if (showSplash) {
+    return <SplashScreen onFinish={() => setShowSplash(false)} />;
+  }
 
   return (
     <View style={styles.container}>

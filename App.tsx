@@ -8,6 +8,7 @@ import { DistancePicker } from './src/components/DistancePicker';
 import { RouteInfo } from './src/components/RouteInfo';
 import { SplashScreen } from './src/components/SplashScreen';
 import { RunningScreen } from './src/components/RunningScreen';
+import * as Speech from 'expo-speech';
 import { DEMO_MODE } from './src/constants';
 import { Coordinate, TargetDistance } from './src/types';
 
@@ -19,6 +20,15 @@ function segmentKm(a: Coordinate, b: Coordinate): number {
   const lat2 = (b.latitude * Math.PI) / 180;
   const x = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.asin(Math.sqrt(x));
+}
+
+function calcBearing(a: Coordinate, b: Coordinate): number {
+  const lat1 = (a.latitude * Math.PI) / 180;
+  const lat2 = (b.latitude * Math.PI) / 180;
+  const dLon = ((b.longitude - a.longitude) * Math.PI) / 180;
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
 export default function App() {
@@ -34,6 +44,8 @@ function AppContent() {
   const [coveredKm, setCoveredKm] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [simulatedLocation, setSimulatedLocation] = useState<Coordinate | null>(null);
+  const [currentInstruction, setCurrentInstruction] = useState<string | null>(null);
+  const [bearing, setBearing] = useState(0);
 
   const isGenerating = status === 'loading';
 
@@ -44,30 +56,69 @@ function AppContent() {
     return () => clearInterval(timer);
   }, [isRunning]);
 
-  // Demo mode: simulate position moving along route coordinates
+  // Demo mode: simulate position moving along route coordinates with voice navigation
   useEffect(() => {
     if (!isRunning || !DEMO_MODE || !route) return;
     const coords = route.coordinates;
-    let index = 0;
+    const steps = route.steps ?? [];
+
+    // Pre-calculate cumulative distances so both blue dot and voice share the same source of truth
+    const cumDist: number[] = [0];
+    for (let i = 1; i < coords.length; i++) {
+      cumDist.push(cumDist[i - 1] + segmentKm(coords[i - 1], coords[i]) * 1000);
+    }
+    const totalM = cumDist[cumDist.length - 1];
+
+    const SPEED_M_PER_TICK = 12; // meters per 500ms tick (adjustable for demo speed)
+    const ANNOUNCE_BEFORE_M = 100;
+    const MIN_GAP_M = 80;
+
+    let localCoveredM = 0;
+    let stepIdx = 0;
+
+    Speech.speak('Starting your run. Good luck!', { language: 'en' });
 
     const interval = setInterval(() => {
-      if (index >= coords.length - 1) return;
-      const next = Math.min(index + 3, coords.length - 1);
-      let added = 0;
-      for (let i = index; i < next; i++) {
-        added += segmentKm(coords[i], coords[i + 1]);
-      }
-      setSimulatedLocation(coords[next]);
-      index = next;
-      setCoveredKm((d) => d + added);
-    }, 300);
+      localCoveredM = Math.min(localCoveredM + SPEED_M_PER_TICK, totalM);
 
-    return () => clearInterval(interval);
+      // Find the coordinate index that matches current distance
+      let coordIdx = cumDist.findIndex((d) => d >= localCoveredM);
+      if (coordIdx === -1) coordIdx = coords.length - 1;
+
+      setSimulatedLocation(coords[coordIdx]);
+      setCoveredKm(localCoveredM / 1000);
+
+      // Look ahead a few coords for a smoother bearing
+      const lookAhead = Math.min(coordIdx + 5, coords.length - 1);
+      if (lookAhead > coordIdx) setBearing(calcBearing(coords[coordIdx], coords[lookAhead]));
+
+      if (localCoveredM >= totalM) {
+        Speech.speak('You have completed the route!', { language: 'en' });
+        return;
+      }
+
+      // Announce next step when within range; skip steps that are too close together
+      if (stepIdx < steps.length && localCoveredM >= steps[stepIdx].distanceFromStartM - ANNOUNCE_BEFORE_M) {
+        Speech.speak(steps[stepIdx].instruction, { language: 'en' });
+        setCurrentInstruction(steps[stepIdx].instruction);
+        const announcedAt = steps[stepIdx].distanceFromStartM;
+        stepIdx += 1;
+        while (stepIdx < steps.length && steps[stepIdx].distanceFromStartM - announcedAt < MIN_GAP_M) {
+          stepIdx += 1;
+        }
+      }
+    }, 500);
+
+    return () => {
+      clearInterval(interval);
+      Speech.stop();
+    };
   }, [isRunning, route]);
 
   function handleStartRun() {
     setCoveredKm(0);
     setElapsedSeconds(0);
+    setCurrentInstruction(null);
     setSimulatedLocation(location);
     setIsRunning(true);
   }
@@ -100,7 +151,7 @@ function AppContent() {
             <Text style={styles.errorText}>{locationError}</Text>
           </View>
         )}
-        {displayLocation && <MapDisplay location={displayLocation} route={route} />}
+        {displayLocation && <MapDisplay location={displayLocation} route={route} isRunning={isRunning} bearing={bearing} />}
       </View>
 
       {/* Running stats card */}
@@ -108,6 +159,7 @@ function AppContent() {
         <RunningScreen
           coveredKm={coveredKm}
           elapsedSeconds={elapsedSeconds}
+          instruction={currentInstruction}
           onStop={handleStopRun}
         />
       ) : (

@@ -9,9 +9,11 @@ MapboxGL.setAccessToken(MAPBOX_TOKEN);
 interface Props {
   location: Coordinate;
   route: RunRoute | null;
+  isRunning?: boolean;
+  bearing?: number;
 }
 
-export function MapDisplay({ location, route }: Props) {
+export function MapDisplay({ location, route, isRunning = false, bearing = 0 }: Props) {
   const center: [number, number] = [location.longitude, location.latitude];
 
   const routeGeoJSON: GeoJSON.Feature<GeoJSON.LineString> | null = route
@@ -28,7 +30,17 @@ export function MapDisplay({ location, route }: Props) {
   return (
     <View style={styles.container}>
       <MapboxGL.MapView style={styles.map} styleURL={MapboxGL.StyleURL.Street}>
-        {route ? (
+        {isRunning ? (
+          // Navigation mode: follow current position, rotate to direction of travel
+          <MapboxGL.Camera
+            centerCoordinate={center}
+            zoomLevel={18}
+            heading={bearing}
+            pitch={45}
+            animationMode="easeTo"
+            animationDuration={400}
+          />
+        ) : route ? (
           <MapboxGL.Camera
             bounds={{
               ...getBoundingBox(route.coordinates),
@@ -38,7 +50,7 @@ export function MapDisplay({ location, route }: Props) {
               paddingRight: 40,
             }}
             animationMode="flyTo"
-            animationDuration={1000} // animated transition when route is generated
+            animationDuration={1000}
           />
         ) : (
           <MapboxGL.Camera

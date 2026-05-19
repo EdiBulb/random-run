@@ -1,5 +1,5 @@
 import { MAPBOX_TOKEN } from '../constants';
-import { Coordinate, RunRoute } from '../types';
+import { Coordinate, RouteStep, RunRoute } from '../types';
 
 const DIRECTIONS_URL = 'https://api.mapbox.com/directions/v5/mapbox/walking';
 
@@ -79,7 +79,7 @@ export async function fetchRandomRoute(origin: Coordinate, targetKm: number): Pr
 
   const url =
     `${DIRECTIONS_URL}/${coords}` +
-    `?geometries=geojson&overview=full&access_token=${MAPBOX_TOKEN}`;
+    `?geometries=geojson&overview=full&steps=true&access_token=${MAPBOX_TOKEN}`;
 
   const response = await fetch(url);
   if (!response.ok) throw new Error('Failed to fetch route from Mapbox.');
@@ -95,5 +95,38 @@ export async function fetchRandomRoute(origin: Coordinate, targetKm: number): Pr
 
   const distanceKm = Math.round((route.distance / 1000) * 10) / 10;
 
-  return { coordinates, distanceKm };
+  // Compute distanceFromStartM using Mapbox's own step distances — accurate and loop-safe.
+  // Each step.distance is the distance from that step's maneuver point to the next step's maneuver point.
+  const legs = route.legs ?? [];
+  const steps: RouteStep[] = [];
+  let legStartM = 0;
+  for (let legIdx = 0; legIdx < legs.length; legIdx++) {
+    const leg = legs[legIdx];
+    const isLastLeg = legIdx === legs.length - 1;
+    let stepStartM = legStartM;
+    for (const step of leg.steps ?? []) {
+      const type = step?.maneuver?.type;
+      if (type === 'depart') {
+        stepStartM += step.distance ?? 0;
+        continue;
+      }
+      // Intermediate waypoint arrival: replace with "Turn around" instead of "Your destination is on the left/right"
+      if (type === 'arrive' && !isLastLeg) {
+        steps.push({
+          instruction: 'Turn around and head back.',
+          distanceFromStartM: Math.round(stepStartM),
+        });
+        stepStartM += step.distance ?? 0;
+        continue;
+      }
+      steps.push({
+        instruction: step.maneuver.instruction,
+        distanceFromStartM: Math.round(stepStartM),
+      });
+      stepStartM += step.distance ?? 0;
+    }
+    legStartM += leg.distance ?? 0;
+  }
+
+  return { coordinates, distanceKm, steps };
 }

@@ -3,6 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 interface Props {
   coveredKm: number;
   elapsedSeconds: number;
+  instruction: string | null;
   onStop: () => void;
 }
 
@@ -20,9 +21,14 @@ function formatPace(distKm: number, seconds: number): string {
   return `${m}:${s}`;
 }
 
-export function RunningScreen({ coveredKm, elapsedSeconds, onStop }: Props) {
+export function RunningScreen({ coveredKm, elapsedSeconds, instruction, onStop }: Props) {
   return (
     <View style={styles.card}>
+      {instruction && (
+        <View style={styles.instructionBanner}>
+          <Text style={styles.instructionText}>{instruction}</Text>
+        </View>
+      )}
       <View style={styles.statsRow}>
         <View style={styles.stat}>
           <Text style={styles.statValue}>{coveredKm.toFixed(2)}</Text>
@@ -60,6 +66,19 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 8,
+  },
+  instructionBanner: {
+    backgroundColor: '#1A1A2E',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  instructionText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   statsRow: {
     flexDirection: 'row',

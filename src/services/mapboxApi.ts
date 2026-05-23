@@ -36,20 +36,23 @@ function offsetCoordinate(origin: Coordinate, bearing: number, distanceKm: numbe
   };
 }
 
-// Places 3 waypoints at ~120° intervals around the origin to form a triangular loop.
-// Dividing by 1.2 compensates for road detours making actual distance longer than straight lines.
+// Places 4 or 5 waypoints at even intervals around the origin for more varied loop shapes.
+// Jitter is capped at 25% of the interval to preserve minimum angular separation between
+// consecutive waypoints, which prevents Mapbox from routing back down the same road.
 function generateWaypoints(origin: Coordinate, targetKm: number): Coordinate[] {
+  const count = Math.random() < 0.5 ? 4 : 5;
   const radius = targetKm / (2 * Math.PI * 1.2);
   const baseBearing = Math.random() * 360;
+  const interval = 360 / count;
+  const maxJitter = interval * 0.25;
 
-  const bearingJitter = () => (Math.random() - 0.5) * 50;
-  const distFactor = () => 0.8 + Math.random() * 0.4;
-
-  return [
-    offsetCoordinate(origin, baseBearing + bearingJitter(), radius * distFactor()),
-    offsetCoordinate(origin, baseBearing + 120 + bearingJitter(), radius * distFactor()),
-    offsetCoordinate(origin, baseBearing + 240 + bearingJitter(), radius * distFactor()),
-  ];
+  const waypoints: Coordinate[] = [];
+  for (let i = 0; i < count; i++) {
+    const bearing = baseBearing + i * interval + (Math.random() - 0.5) * 2 * maxJitter;
+    const distFactor = 0.8 + Math.random() * 0.4;
+    waypoints.push(offsetCoordinate(origin, bearing, radius * distFactor));
+  }
+  return waypoints;
 }
 
 // Calculates the bounding box (NE + SW corners) that contains all route coordinates.

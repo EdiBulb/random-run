@@ -2,6 +2,10 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MAPBOX_TOKEN } from '../constants';
 import { Coordinate, RunRecord } from '../types';
 
+function coordsToStr(coords: Coordinate[]): string {
+  return coords.map(c => `[${c.longitude},${c.latitude}]`).join(',');
+}
+
 interface Props {
   record: RunRecord;
   onLongPress?: () => void;
@@ -40,17 +44,25 @@ function sampleCoords(coords: Coordinate[], maxPoints: number): Coordinate[] {
   return sampled;
 }
 
-function buildStaticMapUrl(coordinates: Coordinate[]): string | null {
+function buildStaticMapUrl(coordinates: Coordinate[], newStreetSegments?: Coordinate[][]): string | null {
   if (!coordinates || coordinates.length === 0) return null;
   const sampled = sampleCoords(coordinates, 50);
-  const coordStr = sampled.map((c) => `[${c.longitude},${c.latitude}]`).join(',');
-  const geojson = `{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[${coordStr}]}}`;
-  const overlay = `geojson(${encodeURIComponent(geojson)})`;
-  return `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/${overlay}/auto/400x220@2x?padding=40&access_token=${MAPBOX_TOKEN}`;
+  const fullRouteGeoJSON = `{"type":"Feature","properties":{"stroke":"#4CAF50","stroke-width":3},"geometry":{"type":"LineString","coordinates":[${coordsToStr(sampled)}]}}`;
+  let overlays = `geojson(${encodeURIComponent(fullRouteGeoJSON)})`;
+
+  if (newStreetSegments && newStreetSegments.length > 0) {
+    const capped = newStreetSegments.slice(0, 8);
+    const sampledSegs = capped.map(seg => sampleCoords(seg, 5));
+    const multiCoords = sampledSegs.map(seg => `[${coordsToStr(seg)}]`).join(',');
+    const newGeoJSON = `{"type":"Feature","properties":{"stroke":"#F44336","stroke-width":3},"geometry":{"type":"MultiLineString","coordinates":[${multiCoords}]}}`;
+    overlays += `,geojson(${encodeURIComponent(newGeoJSON)})`;
+  }
+
+  return `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/${overlays}/auto/400x220@2x?padding=40&access_token=${MAPBOX_TOKEN}`;
 }
 
 export function RunCard({ record, onLongPress }: Props) {
-  const mapUrl = buildStaticMapUrl(record.routeCoordinates);
+  const mapUrl = buildStaticMapUrl(record.routeCoordinates, record.newStreetSegments);
 
   return (
     <TouchableOpacity style={styles.card} onLongPress={onLongPress} activeOpacity={0.92} delayLongPress={400}>
@@ -62,7 +74,14 @@ export function RunCard({ record, onLongPress }: Props) {
       <View style={styles.overlay}>
         <View style={styles.gradientFill} />
         <View style={styles.topRow}>
-          <Text style={styles.name} numberOfLines={1}>{record.name}</Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.name} numberOfLines={1}>{record.name}</Text>
+            {record.newStreets?.length > 0 && (
+              <View style={styles.streetsBadge}>
+                <Text style={styles.streetsBadgeText}>+{record.newStreets.length} new</Text>
+              </View>
+            )}
+          </View>
           <Text style={styles.date}>{formatDate(record.date)}</Text>
         </View>
         <View style={styles.statsRow}>
@@ -160,5 +179,21 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: '75%',
     backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  streetsBadge: {
+    backgroundColor: 'rgba(76,175,80,0.85)',
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  streetsBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
   },
 });

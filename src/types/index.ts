@@ -10,12 +10,15 @@ export interface Coordinate {
 export interface RouteStep {
   instruction: string;
   distanceFromStartM: number;
+  streetName?: string;
+  coordinates: Coordinate[];
 }
 
 export interface RunRoute {
   coordinates: Coordinate[];
   distanceKm: number;
   steps: RouteStep[];
+  streetNames: string[];  // all named streets in this route
 }
 
 export type RouteStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -23,8 +26,18 @@ export type RouteStatus = 'idle' | 'loading' | 'success' | 'error';
 export interface RunRecord {
   id: string;
   name: string;
-  date: string;            // ISO timestamp
+  date: string;
   distanceKm: number;
   elapsedSeconds: number;
   routeCoordinates: Coordinate[];
+  newStreets: string[];
+  newStreetSegments?: Coordinate[][];  // per-step coordinate arrays for new streets
+}
+
+export interface Badge {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  requiredStreets: number;
 }

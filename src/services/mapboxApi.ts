@@ -102,6 +102,7 @@ export async function fetchRandomRoute(origin: Coordinate, targetKm: number): Pr
   // Each step.distance is the distance from that step's maneuver point to the next step's maneuver point.
   const legs = route.legs ?? [];
   const steps: RouteStep[] = [];
+  const streetNameSet = new Set<string>();
   let legStartM = 0;
   for (let legIdx = 0; legIdx < legs.length; legIdx++) {
     const leg = legs[legIdx];
@@ -109,29 +110,27 @@ export async function fetchRandomRoute(origin: Coordinate, targetKm: number): Pr
     let stepStartM = legStartM;
     for (const step of leg.steps ?? []) {
       const type = step?.maneuver?.type;
+      const streetName: string | undefined = step?.name && step.name.trim() ? step.name.trim() : undefined;
+      if (streetName) streetNameSet.add(streetName);
       if (type === 'depart') {
         stepStartM += step.distance ?? 0;
         continue;
       }
-      // Intermediate waypoint arrival: replace with "Turn around" instead of "Your destination is on the left/right"
+      const stepCoords: Coordinate[] = (step.geometry?.coordinates ?? []).map(
+        ([longitude, latitude]: [number, number]) => ({ latitude, longitude })
+      );
       if (type === 'arrive' && !isLastLeg) {
-        steps.push({
-          instruction: 'Turn around and head back.',
-          distanceFromStartM: Math.round(stepStartM),
-        });
+        steps.push({ instruction: 'Turn around and head back.', distanceFromStartM: Math.round(stepStartM), streetName, coordinates: stepCoords });
         stepStartM += step.distance ?? 0;
         continue;
       }
-      steps.push({
-        instruction: step.maneuver.instruction,
-        distanceFromStartM: Math.round(stepStartM),
-      });
+      steps.push({ instruction: step.maneuver.instruction, distanceFromStartM: Math.round(stepStartM), streetName, coordinates: stepCoords });
       stepStartM += step.distance ?? 0;
     }
     legStartM += leg.distance ?? 0;
   }
 
-  return { coordinates, distanceKm, steps };
+  return { coordinates, distanceKm, steps, streetNames: Array.from(streetNameSet) };
 }
 
 // Straight-line distance between two coordinates in km
@@ -221,6 +220,7 @@ export async function fetchDestinationRoute(
 
   const legs = route.legs ?? [];
   const steps: RouteStep[] = [];
+  const streetNameSet = new Set<string>();
   let legStartM = 0;
   for (let legIdx = 0; legIdx < legs.length; legIdx++) {
     const leg = legs[legIdx];
@@ -228,13 +228,18 @@ export async function fetchDestinationRoute(
     let stepStartM = legStartM;
     for (const step of leg.steps ?? []) {
       const type = step?.maneuver?.type;
+      const streetName: string | undefined = step?.name && step.name.trim() ? step.name.trim() : undefined;
+      if (streetName) streetNameSet.add(streetName);
+      const stepCoords: Coordinate[] = (step.geometry?.coordinates ?? []).map(
+        ([longitude, latitude]: [number, number]) => ({ latitude, longitude })
+      );
       if (type === 'depart') { stepStartM += step.distance ?? 0; continue; }
       if (type === 'arrive' && !isLastLeg) { stepStartM += step.distance ?? 0; continue; }
-      steps.push({ instruction: step.maneuver.instruction, distanceFromStartM: Math.round(stepStartM) });
+      steps.push({ instruction: step.maneuver.instruction, distanceFromStartM: Math.round(stepStartM), streetName, coordinates: stepCoords });
       stepStartM += step.distance ?? 0;
     }
     legStartM += leg.distance ?? 0;
   }
 
-  return { coordinates, distanceKm, steps };
+  return { coordinates, distanceKm, steps, streetNames: Array.from(streetNameSet) };
 }

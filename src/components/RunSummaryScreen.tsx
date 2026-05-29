@@ -1,10 +1,12 @@
-import { useRef } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import MapboxGL from '@rnmapbox/maps';
 import { MAPBOX_TOKEN } from '../constants';
-import { Coordinate, RunRecord, RunRoute } from '../types';
+import { Badge, Coordinate, RunRecord, RunRoute } from '../types';
 import { saveRunRecord } from '../services/storage';
+import { findNewStreets, getTotalExploredCount, saveNewStreets } from '../services/streetTracker';
+import { getNewlyEarnedBadges } from '../services/badges';
 
 MapboxGL.setAccessToken(MAPBOX_TOKEN);
 
@@ -50,6 +52,11 @@ function getBoundingBox(coordinates: Coordinate[]) {
 export function RunSummaryScreen({ coveredKm, elapsedSeconds, route, onHome }: Props) {
   const runNameRef = useRef(defaultRunName());
   const navigation = useNavigation();
+  const [newBadges, setNewBadges] = useState<Badge[]>([]);
+  const [newStreetCount, setNewStreetCount] = useState<number | null>(null);
+  const [badgeModalVisible, setBadgeModalVisible] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [savedNewStreets, setSavedNewStreets] = useState<string[]>([]);
 
   const routeGeoJSON: GeoJSON.Feature<GeoJSON.LineString> = {
     type: 'Feature',
@@ -62,7 +69,27 @@ export function RunSummaryScreen({ coveredKm, elapsedSeconds, route, onHome }: P
 
   const bounds = getBoundingBox(route.coordinates);
 
+  const newStreetsSet = new Set(savedNewStreets);
+  const newSegments = route.steps
+    .filter(s => s.streetName && newStreetsSet.has(s.streetName) && s.coordinates.length > 0)
+    .map(s => s.coordinates.map(c => [c.longitude, c.latitude]));
+  const newStreetsGeoJSON: GeoJSON.Feature<GeoJSON.MultiLineString> | null =
+    newSegments.length > 0
+      ? { type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: newSegments } }
+      : null;
+
   async function handleSave() {
+    const prevTotal = await getTotalExploredCount();
+    const newStreets = await findNewStreets(route.streetNames ?? []);
+    await saveNewStreets(newStreets);
+    const newTotal = await getTotalExploredCount();
+    const earned = getNewlyEarnedBadges(prevTotal, newTotal);
+
+    const newStreetsSet = new Set(newStreets);
+    const newStreetSegments = route.steps
+      .filter(s => s.streetName && newStreetsSet.has(s.streetName) && s.coordinates.length > 0)
+      .map(s => s.coordinates);
+
     const record: RunRecord = {
       id: String(Date.now()),
       name: runNameRef.current.trim() || defaultRunName(),
@@ -70,10 +97,27 @@ export function RunSummaryScreen({ coveredKm, elapsedSeconds, route, onHome }: P
       distanceKm: coveredKm,
       elapsedSeconds,
       routeCoordinates: route.coordinates,
+      newStreets,
+      newStreetSegments: newStreetSegments.length > 0 ? newStreetSegments : undefined,
     };
     await saveRunRecord(record);
+
+    setNewStreetCount(newStreets.length);
+    setSavedNewStreets(newStreets);
+    setSaved(true);
+    if (earned.length > 0) {
+      setNewBadges(earned);
+      setBadgeModalVisible(true);
+    }
+  }
+
+  function handleDone() {
     onHome();
     navigation.navigate('Home' as never);
+  }
+
+  function handleBadgeClose() {
+    setBadgeModalVisible(false);
   }
 
   return (
@@ -113,6 +157,17 @@ export function RunSummaryScreen({ coveredKm, elapsedSeconds, route, onHome }: P
         </View>
       </View>
 
+      {/* New streets banner */}
+      {newStreetCount !== null && (
+        <View style={styles.streetsBanner}>
+          <Text style={styles.streetsBannerText}>
+            {newStreetCount > 0
+              ? `🗺️ ${newStreetCount} new street${newStreetCount !== 1 ? 's' : ''} discovered!`
+              : '📍 No new streets this time'}
+          </Text>
+        </View>
+      )}
+
       {/* Route map */}
       <View style={styles.mapContainer}>
         <MapboxGL.MapView
@@ -132,13 +187,46 @@ export function RunSummaryScreen({ coveredKm, elapsedSeconds, route, onHome }: P
               style={{ lineColor: '#4CAF50', lineWidth: 4, lineJoin: 'round', lineCap: 'round' }}
             />
           </MapboxGL.ShapeSource>
+          {newStreetsGeoJSON && (
+            <MapboxGL.ShapeSource id="new-streets" shape={newStreetsGeoJSON}>
+              <MapboxGL.LineLayer
+                id="new-streets-line"
+                style={{ lineColor: '#F44336', lineWidth: 4, lineJoin: 'round', lineCap: 'round' }}
+              />
+            </MapboxGL.ShapeSource>
+          )}
         </MapboxGL.MapView>
       </View>
 
-      {/* Save button */}
-      <TouchableOpacity style={styles.saveButton} onPress={handleSave} activeOpacity={0.8}>
-        <Text style={styles.saveButtonText}>Save & Go Home</Text>
+      {/* Save / Done button */}
+      <TouchableOpacity
+        style={styles.saveButton}
+        onPress={saved ? handleDone : handleSave}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.saveButtonText}>{saved ? 'Done' : 'Save & Go Home'}</Text>
       </TouchableOpacity>
+
+      {/* Badge achievement modal */}
+      <Modal visible={badgeModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>New Badge{newBadges.length > 1 ? 's' : ''} Unlocked! 🎉</Text>
+            {newBadges.map((badge) => (
+              <View key={badge.id} style={styles.badgeRow}>
+                <Text style={styles.badgeEmoji}>{badge.emoji}</Text>
+                <View>
+                  <Text style={styles.badgeName}>{badge.name}</Text>
+                  <Text style={styles.badgeDesc}>{badge.description}</Text>
+                </View>
+              </View>
+            ))}
+            <TouchableOpacity style={styles.modalButton} onPress={() => { handleBadgeClose(); }}>
+              <Text style={styles.modalButtonText}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -185,6 +273,16 @@ const styles = StyleSheet.create({
   statDivider: { width: 1, backgroundColor: '#E0E0E0', marginVertical: 4 },
   statValue: { fontSize: 24, fontWeight: '700', color: '#1A1A1A' },
   statLabel: { fontSize: 12, color: '#888', letterSpacing: 0.5 },
+  streetsBanner: {
+    backgroundColor: '#E8F5E9',
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  streetsBannerText: { fontSize: 15, fontWeight: '600', color: '#2E7D32' },
   mapContainer: { height: 240, marginTop: 12, marginHorizontal: 16, borderRadius: 16, overflow: 'hidden' },
   map: { flex: 1 },
   saveButton: {
@@ -196,4 +294,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 28,
+    width: '100%',
+    gap: 16,
+    alignItems: 'center',
+  },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: '#1A1A1A', textAlign: 'center' },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 16, width: '100%' },
+  badgeEmoji: { fontSize: 48 },
+  badgeName: { fontSize: 17, fontWeight: '700', color: '#1A1A1A' },
+  badgeDesc: { fontSize: 13, color: '#888', marginTop: 2 },
+  modalButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    marginTop: 4,
+  },
+  modalButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

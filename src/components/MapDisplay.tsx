@@ -1,6 +1,8 @@
 import MapboxGL from '@rnmapbox/maps';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { MAPBOX_TOKEN, DEFAULT_ZOOM, DEMO_MODE } from '../constants';
+import { Magnetometer } from 'expo-sensors';
+import { MAPBOX_TOKEN, DEFAULT_ZOOM } from '../constants';
 import { getBoundingBox } from '../services/mapboxApi';
 import { Coordinate, RunRoute } from '../types';
 
@@ -26,6 +28,23 @@ export function MapDisplay({
   onMapPress,
 }: Props) {
   const center: [number, number] = [location.longitude, location.latitude];
+
+  const [compassHeading, setCompassHeading] = useState(0);
+
+  useEffect(() => {
+    Magnetometer.setUpdateInterval(100);
+    const sub = Magnetometer.addListener(({ x, y }) => {
+      let angle = Math.atan2(y, x) * (180 / Math.PI);
+      angle = angle + 90;
+      if (angle > 360) angle -= 360;
+      if (angle < 0) angle += 360;
+      setCompassHeading(Math.round(angle));
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Use GPS bearing when moving during a run, otherwise use device compass
+  const effectiveBearing = isRunning && bearing !== 0 ? bearing : compassHeading;
 
   const routeGeoJSON: GeoJSON.Feature<GeoJSON.LineString> | null = route
     ? {
@@ -82,8 +101,9 @@ export function MapDisplay({
         )}
 
         <MapboxGL.PointAnnotation id="user-location" coordinate={center}>
-          <View style={styles.markerOuter}>
-            <View style={styles.markerInner} />
+          <View style={[styles.arrowWrapper, { transform: [{ rotate: `${effectiveBearing}deg` }] }]}>
+            <View style={styles.arrowOuter} />
+            <View style={styles.arrowInner} />
           </View>
         </MapboxGL.PointAnnotation>
 
@@ -152,21 +172,36 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
-  markerOuter: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: 'rgba(66, 133, 244, 0.25)',
+  arrowWrapper: {
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  markerInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#4285F4',
-    borderWidth: 2,
-    borderColor: '#fff',
+  arrowOuter: {
+    position: 'absolute',
+    width: 0,
+    height: 0,
+    borderLeftWidth: 10,
+    borderRightWidth: 10,
+    borderBottomWidth: 24,
+    borderStyle: 'solid',
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: '#fff',
+  },
+  arrowInner: {
+    position: 'absolute',
+    width: 0,
+    height: 0,
+    borderLeftWidth: 7,
+    borderRightWidth: 7,
+    borderBottomWidth: 18,
+    borderStyle: 'solid',
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: '#4285F4',
+    marginTop: 3,
   },
   destinationOuter: {
     width: 26,

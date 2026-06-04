@@ -47,6 +47,8 @@ export function RunScreen() {
   const [isFinished, setIsFinished] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isFollowMode, setIsFollowMode] = useState(true);
+  const [nextWaypointIndex, setNextWaypointIndex] = useState(0);
+  const nextWaypointIndexRef = useRef(0);
   const isPausedRef = useRef(false);
   const [coveredKm, setCoveredKm] = useState(0);
   const panelNaturalHeightRef = useRef(0);
@@ -124,6 +126,12 @@ export function RunScreen() {
       setSimulatedLocation(coords[coordIdx]);
       setCoveredKm(localCoveredM / 1000);
 
+      const nextWp = route.waypoints?.[nextWaypointIndexRef.current];
+      if (nextWp && segmentKm(coords[coordIdx], nextWp) * 1000 < 30) {
+        nextWaypointIndexRef.current += 1;
+        setNextWaypointIndex(nextWaypointIndexRef.current);
+      }
+
       const lookAhead = Math.min(coordIdx + 5, coords.length - 1);
       if (lookAhead > coordIdx) setBearing(calcBearing(coords[coordIdx], coords[lookAhead]));
 
@@ -180,6 +188,12 @@ export function RunScreen() {
 
         setSimulatedLocation(coord);
 
+        const nextWp = route.waypoints?.[nextWaypointIndexRef.current];
+        if (nextWp && segmentKm(coord, nextWp) * 1000 < 30) {
+          nextWaypointIndexRef.current += 1;
+          setNextWaypointIndex(nextWaypointIndexRef.current);
+        }
+
         if (prevCoord) {
           const segM = segmentKm(prevCoord, coord) * 1000;
           localCoveredM += segM;
@@ -219,6 +233,8 @@ export function RunScreen() {
     setIsPaused(false);
     slideY.setValue(0);
     setIsFollowMode(true);
+    nextWaypointIndexRef.current = 0;
+    setNextWaypointIndex(0);
     setIsRunning(true);
   }
 
@@ -288,6 +304,7 @@ export function RunScreen() {
             isFollowMode={isFollowMode}
             onUserDrag={() => setIsFollowMode(false)}
             onFollowResume={() => setIsFollowMode(true)}
+            nextWaypointIndex={nextWaypointIndex}
           />
         )}
         {isRunning && currentInstruction && (

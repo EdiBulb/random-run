@@ -1,6 +1,6 @@
 import MapboxGL from '@rnmapbox/maps';
 import { useEffect, useRef, useState } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Magnetometer } from 'expo-sensors';
 import { MAPBOX_TOKEN, DEFAULT_ZOOM } from '../constants';
 import { getBoundingBox } from '../services/mapboxApi';
@@ -19,6 +19,7 @@ interface Props {
   isFollowMode?: boolean;
   onUserDrag?: () => void;
   onFollowResume?: () => void;
+  nextWaypointIndex?: number;
 }
 
 export function MapDisplay({
@@ -32,11 +33,24 @@ export function MapDisplay({
   isFollowMode = true,
   onUserDrag,
   onFollowResume,
+  nextWaypointIndex = 0,
 }: Props) {
   const center: [number, number] = [location.longitude, location.latitude];
   const cameraRef = useRef<MapboxGL.Camera>(null);
 
   const [compassHeading, setCompassHeading] = useState(0);
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
 
   useEffect(() => {
     if (!isRunning || !isFollowMode) return;
@@ -154,12 +168,14 @@ export function MapDisplay({
             id="waypoints-source"
             shape={{
               type: 'FeatureCollection',
-              features: route.waypoints.map((wp, i) => ({
-                type: 'Feature',
-                id: String(i),
-                properties: {},
-                geometry: { type: 'Point', coordinates: [wp.longitude, wp.latitude] },
-              })),
+              features: route.waypoints
+                .filter((_, i) => !isRunning || i !== nextWaypointIndex)
+                .map((wp, i) => ({
+                  type: 'Feature',
+                  id: String(i),
+                  properties: {},
+                  geometry: { type: 'Point', coordinates: [wp.longitude, wp.latitude] },
+                })),
             }}
           >
             <MapboxGL.CircleLayer
@@ -167,6 +183,29 @@ export function MapDisplay({
               style={{ circleRadius: 6, circleColor: '#000', circleStrokeWidth: 2, circleStrokeColor: '#fff' }}
             />
           </MapboxGL.ShapeSource>
+        )}
+
+        {isRunning && route?.waypoints?.[nextWaypointIndex] && (
+          <MapboxGL.PointAnnotation
+            id="next-waypoint"
+            coordinate={[
+              route.waypoints[nextWaypointIndex].longitude,
+              route.waypoints[nextWaypointIndex].latitude,
+            ]}
+          >
+            <View style={styles.nextWpContainer}>
+              <Animated.View
+                style={[
+                  styles.nextWpPulse,
+                  {
+                    opacity: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] }),
+                    transform: [{ scale: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 2.8] }) }],
+                  },
+                ]}
+              />
+              <View style={styles.nextWpDot} />
+            </View>
+          </MapboxGL.PointAnnotation>
         )}
       </MapboxGL.MapView>
 
@@ -270,6 +309,27 @@ const styles = StyleSheet.create({
   followIcon: {
     width: 50,
     height: 50,
+  },
+  nextWpContainer: {
+    width: 56,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nextWpPulse: {
+    position: 'absolute',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#4285F4',
+  },
+  nextWpDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#4285F4',
+    borderWidth: 3,
+    borderColor: '#fff',
   },
   tapHint: {
     position: 'absolute',

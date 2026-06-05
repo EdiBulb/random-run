@@ -1,4 +1,5 @@
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useState } from 'react';
+import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SlideToResume } from './SlideToResume';
 
 interface Props {
@@ -25,19 +26,9 @@ function formatPace(distKm: number, seconds: number): string {
   return `${m}:${s}`;
 }
 
-function handleFinishPress(onFinish: () => void) {
-  Alert.alert(
-    'Finish Run?',
-    'Are you sure you want to end this run?',
-    [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Finish', style: 'destructive', onPress: onFinish },
-    ]
-  );
-}
-
 export function RunningScreen({ coveredKm, elapsedSeconds, totalKm, isPaused, onPause, onResume, onFinish }: Props) {
   const remainingKm = Math.max(0, totalKm - coveredKm);
+  const [showFinishModal, setShowFinishModal] = useState(false);
 
   return (
     <View style={styles.card}>
@@ -82,7 +73,7 @@ export function RunningScreen({ coveredKm, elapsedSeconds, totalKm, isPaused, on
       {isPaused ? (
         <View style={styles.pausedActions}>
           <SlideToResume onResume={onResume} />
-          <TouchableOpacity onPress={() => handleFinishPress(onFinish)} activeOpacity={0.6}>
+          <TouchableOpacity onPress={() => setShowFinishModal(true)} activeOpacity={0.6}>
             <Text style={styles.finishLink}>Finish Run</Text>
           </TouchableOpacity>
         </View>
@@ -91,6 +82,33 @@ export function RunningScreen({ coveredKm, elapsedSeconds, totalKm, isPaused, on
           <Text style={styles.pauseButtonText}>⏸  Pause</Text>
         </TouchableOpacity>
       )}
+      <Modal
+        visible={showFinishModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowFinishModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>End your run?</Text>
+            <Text style={styles.modalSubtitle}>Your progress will be saved.</Text>
+            <TouchableOpacity
+              style={styles.modalKeepButton}
+              onPress={() => setShowFinishModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modalKeepText}>Keep Running</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalEndButton}
+              onPress={() => { setShowFinishModal(false); onFinish(); }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modalEndText}>End Run</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -194,5 +212,56 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#E53935',
     textDecorationLine: 'underline',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    paddingVertical: 32,
+    paddingHorizontal: 28,
+    width: '100%',
+    alignItems: 'center',
+    gap: 12,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#888',
+    marginBottom: 8,
+  },
+  modalKeepButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 14,
+    borderRadius: 28,
+    alignItems: 'center',
+    width: '100%',
+  },
+  modalKeepText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  modalEndButton: {
+    paddingVertical: 14,
+    borderRadius: 28,
+    alignItems: 'center',
+    width: '100%',
+    borderWidth: 1.5,
+    borderColor: '#E53935',
+  },
+  modalEndText: {
+    color: '#E53935',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

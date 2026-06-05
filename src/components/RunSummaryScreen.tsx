@@ -79,8 +79,16 @@ export function RunSummaryScreen({ coveredKm, elapsedSeconds, route, onHome }: P
       : null;
 
   async function handleSave() {
+    const coveredM = coveredKm * 1000;
+    const coveredStreetNames = [
+      ...new Set(
+        route.steps
+          .filter(s => s.streetName && s.distanceFromStartM <= coveredM)
+          .map(s => s.streetName as string)
+      ),
+    ];
     const prevTotal = await getTotalExploredCount();
-    const newStreets = await findNewStreets(route.streetNames ?? []);
+    const newStreets = await findNewStreets(coveredStreetNames);
     await saveNewStreets(newStreets);
     const newTotal = await getTotalExploredCount();
     const earned = getNewlyEarnedBadges(prevTotal, newTotal);

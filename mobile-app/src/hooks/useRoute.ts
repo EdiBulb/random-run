@@ -6,6 +6,7 @@ interface UseRouteResult {
   route: RunRoute | null;
   status: RouteStatus;
   generate: () => void;
+  clearRoute: () => void;
 }
 
 export function useRoute(
@@ -36,5 +37,10 @@ export function useRoute(
     }
   }, [origin, targetKm, mode, destination, difficulty]);
 
-  return { route, status, generate };
+  const clearRoute = useCallback(() => {
+    setRoute(null);
+    setStatus('idle');
+  }, []);
+
+  return { route, status, generate, clearRoute };
 }

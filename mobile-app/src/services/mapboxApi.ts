@@ -41,8 +41,9 @@ function offsetCoordinate(origin: Coordinate, bearing: number, distanceKm: numbe
 // consecutive waypoints, which prevents Mapbox from routing back down the same road.
 function generateWaypoints(origin: Coordinate, targetKm: number): Coordinate[] {
   const count = Math.random() < 0.5 ? 3 : 4;
-  // Each step covers roughly equal share of total distance; +1 accounts for return leg
-  const stepKm = (targetKm / (count + 1)) * (0.85 + Math.random() * 0.3);
+  // Road routing is ~1.4x longer than straight-line, and the chain walk means the return
+  // leg distance is unpredictable. Scale down by ~0.45 to keep total route near targetKm.
+  const stepKm = (targetKm / (count + 1)) * (0.42 + Math.random() * 0.08);
   // Random initial direction
   let bearing = Math.random() * 360;
   let prev = origin;

@@ -42,7 +42,7 @@ export function RunScreen() {
   const [routeMode, setRouteMode] = useState<RouteMode>('loop');
   const [destination, setDestination] = useState<Coordinate | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
-  const { route, status, generate } = useRoute(location, selectedDistance, routeMode, destination, difficulty);
+  const { route, status, generate, clearRoute } = useRoute(location, selectedDistance, routeMode, destination, difficulty);
   const [isRunning, setIsRunning] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -370,13 +370,13 @@ export function RunScreen() {
       {!isRunning && (routeMode === 'destination' && !destination ? (
         <View style={styles.cardMinimal}>
           <Text style={styles.appTitle}>Roamer</Text>
-          <ModePicker selected={routeMode} onSelect={(m) => { setRouteMode(m); setDestination(null); }} />
+          <ModePicker selected={routeMode} onSelect={(m) => { setRouteMode(m); setDestination(null); clearRoute(); }} />
         </View>
       ) : (
         <View style={styles.card}>
           <Text style={styles.appTitle}>Roamer</Text>
 
-          <ModePicker selected={routeMode} onSelect={(m) => { setRouteMode(m); setDestination(null); }} />
+          <ModePicker selected={routeMode} onSelect={(m) => { setRouteMode(m); setDestination(null); clearRoute(); }} />
 
           {routeMode === 'loop' ? (
             <DistancePicker selected={selectedDistance} onSelect={(d) => setSelectedDistance(d)} />
@@ -397,8 +397,13 @@ export function RunScreen() {
               <TouchableOpacity style={styles.startRunButton} onPress={handleStartRun} activeOpacity={0.8}>
                 <Text style={styles.startRunButtonText}>▶  Start Run</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={generate} disabled={isGenerating} activeOpacity={0.6}>
-                <Text style={styles.regenerateLink}>
+              <TouchableOpacity
+                style={[styles.regenerateButton, isGenerating && styles.regenerateButtonDisabled]}
+                onPress={generate}
+                disabled={isGenerating}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.regenerateButtonText}>
                   {isGenerating ? 'Generating...' : '↺  Regenerate Route'}
                 </Text>
               </TouchableOpacity>
@@ -483,7 +488,17 @@ const styles = StyleSheet.create({
     minHeight: 54,
   },
   startRunButtonText: { color: '#fff', fontSize: 18, fontWeight: '800', letterSpacing: 0.5 },
-  regenerateLink: { fontSize: 14, color: '#888', textDecorationLine: 'underline' },
+  regenerateButton: {
+    borderWidth: 1.5,
+    borderColor: '#ccc',
+    borderRadius: 24,
+    paddingVertical: 10,
+    paddingHorizontal: 28,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  regenerateButtonDisabled: { borderColor: '#e0e0e0' },
+  regenerateButtonText: { fontSize: 14, color: '#555', fontWeight: '600' },
   generateButton: {
     backgroundColor: '#4CAF50',
     paddingVertical: 14,

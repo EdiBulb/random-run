@@ -76,8 +76,8 @@ export function MapDisplay({
     return () => sub.remove();
   }, []);
 
-  // Use GPS bearing when moving during a run, otherwise use device compass
-  const effectiveBearing = isRunning && bearing !== 0 ? bearing : compassHeading;
+  // Always use Magnetometer for the arrow — 100ms updates vs GPS 2s updates
+  const effectiveBearing = compassHeading;
 
   const routeGeoJSON: GeoJSON.Feature<GeoJSON.LineString> | null = route
     ? {

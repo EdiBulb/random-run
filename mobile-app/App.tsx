@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SplashScreen } from './src/components/SplashScreen';
@@ -8,6 +9,11 @@ import { useState, useEffect } from 'react';
 import { View } from 'react-native';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  environment: __DEV__ ? 'development' : 'production',
+});
 
 const ONBOARDING_KEY = 'onboardingCompleted';
 const TUTORIAL_KEY = 'tutorialCompleted';

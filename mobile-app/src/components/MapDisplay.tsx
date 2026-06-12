@@ -86,9 +86,20 @@ export function MapDisplay({
 }: Props) {
   const center: [number, number] = [location.longitude, location.latitude];
   const cameraRef = useRef<MapboxGL.Camera>(null);
+  const mapRef = useRef<MapboxGL.MapView>(null);
 
   const [compassHeading, setCompassHeading] = useState(0);
+  const [mapHeading, setMapHeading] = useState(0);
+  const [arrowPos, setArrowPos] = useState<{ x: number; y: number } | null>(null);
   const pulseAnim = useRef(new Animated.Value(0)).current;
+
+  async function recalcArrowPos() {
+    if (!mapRef.current) return;
+    try {
+      const pos = await (mapRef.current as any).getPointInView([location.longitude, location.latitude]);
+      setArrowPos({ x: pos[0], y: pos[1] });
+    } catch {}
+  }
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -116,17 +127,17 @@ export function MapDisplay({
   useEffect(() => {
     Magnetometer.setUpdateInterval(100);
     const sub = Magnetometer.addListener(({ x, y }) => {
-      let angle = Math.atan2(y, x) * (180 / Math.PI);
-      angle = angle + 90;
-      if (angle > 360) angle -= 360;
+      let angle = Math.atan2(-x, y) * (180 / Math.PI);
       if (angle < 0) angle += 360;
       setCompassHeading(Math.round(angle));
     });
     return () => sub.remove();
   }, []);
 
-  // Always use Magnetometer for the arrow — 100ms updates vs GPS 2s updates
-  const effectiveBearing = compassHeading;
+  useEffect(() => {
+    recalcArrowPos();
+  }, [location]);
+
 
   // ── route segment splitting (only when running) ───────────────────────────
 
@@ -175,11 +186,19 @@ export function MapDisplay({
   return (
     <View style={styles.container}>
       <MapboxGL.MapView
+        ref={mapRef}
         style={styles.map}
         styleURL={MapboxGL.StyleURL.Street}
         onPress={handlePress}
+        onDidFinishLoadingMap={() => recalcArrowPos()}
+        onRegionDidChange={(feature) => {
+          setMapHeading(feature.properties?.heading ?? 0);
+          recalcArrowPos();
+        }}
         onRegionIsChanging={(feature) => {
+          setMapHeading(feature.properties?.heading ?? 0);
           if (isRunning && feature.properties?.isUserInteraction) onUserDrag?.();
+          recalcArrowPos();
         }}
       >
         {/* ── camera ── */}
@@ -206,13 +225,6 @@ export function MapDisplay({
           />
         )}
 
-        {/* ── user location arrow ── */}
-        <MapboxGL.PointAnnotation id="user-location" coordinate={center}>
-          <View style={[styles.arrowWrapper, { transform: [{ rotate: `${effectiveBearing}deg` }] }]}>
-            <View style={styles.arrowOuter} />
-            <View style={styles.arrowInner} />
-          </View>
-        </MapboxGL.PointAnnotation>
 
         {/* ── destination pin ── */}
         {destination && (
@@ -347,7 +359,25 @@ export function MapDisplay({
         </TouchableOpacity>
       )}
 
-      {/* ── destination picker hint ── */}
+      {/* ── user arrow overlay at GPS screen position ── */}
+      {arrowPos && (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.arrowWrapper,
+            {
+              position: 'absolute',
+              left: arrowPos.x - 14,
+              top: arrowPos.y - 14,
+              transform: [{ rotate: `${compassHeading - mapHeading}deg` }],
+            },
+          ]}
+        >
+          <View style={styles.arrowOuter} />
+          <View style={styles.arrowInner} />
+        </View>
+      )}
+
       {destinationPickerActive && (
         <View style={styles.tapHint} pointerEvents="none">
           <View style={styles.tapHintBadge}>
@@ -470,4 +500,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   tapHintText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  centeredArrow: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#4285F4',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
 });
